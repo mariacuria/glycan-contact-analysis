@@ -1,3 +1,7 @@
 data/
 logs/
 venv/
+.csv
+.log
+.pdb
+__pycache__
