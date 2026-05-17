@@ -2,6 +2,8 @@ data/
 logs/
 venv/
 .csv
+.DS_Store
+.ipynb_checkpoints
 .log
 .pdb
 __pycache__
