@@ -3,6 +3,7 @@ logs/
 venv/
 .csv
 .DS_Store
+.env
 .ipynb_checkpoints
 .log
 .pdb

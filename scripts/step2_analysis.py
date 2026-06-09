@@ -12,9 +12,17 @@ import urllib.request, os
 import matplotlib
 matplotlib.use("Agg")  # must come before importing pyplot
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-def fetch_pdb(pdb_id, folder="."):
-    path = os.path.join(folder, f"{pdb_id}.pdb")
+root_dir = Path(__file__).parents[1].resolve()
+data_dir = root_dir / 'data'
+downloads_dir = data_dir / 'downloads'
+generated_dir = data_dir / 'generated' / 'step2'
+for name, p in [("root", root_dir), ("data", data_dir), ("downloads", downloads_dir), ("generated", generated_dir)]:
+    print(f"{name:12} {p}  (exists: {p.exists()})")
+
+def fetch_pdb(pdb_id, folder=downloads_dir):
+    path = downloads_dir / f"{pdb_id}.pdb"
     if not os.path.exists(path):
         url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
         urllib.request.urlretrieve(url, path)
@@ -42,7 +50,7 @@ summarise(df_1gya)
 
 # Merge into one master table for aim-2 analysis
 df_all = pd.concat([df_3ave, df_2wah, df_1gya], ignore_index=True)
-df_all.to_csv("step2_all_contacts.csv", index=False)
+df_all.to_csv(generated_dir / "step2_all_contacts.csv", index=False)
 print(f"\nMaster table: {len(df_all)} rows → step2_all_contacts.csv")
 
 
@@ -58,12 +66,12 @@ COLORS = {
     "van der Waals" : "#534AB7",
 }
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=False)
+fig, axes = plt.subplots(1, 3, figsize=(16, 4), sharey=False)
 
 for ax, (df, label) in zip(axes, [
         (df_3ave, "3AVE – IgG1 Fc"),
         (df_2wah, "2WAH - CD2 adhesion domain"),
-        (df_1gya, "1GYA – CD2 adhesion")
+        (df_1gya, "1GYA – CD2 adhesion"),
     ]
 ):
     counts = df["interaction_type"].value_counts()
@@ -84,7 +92,7 @@ for ax, (df, label) in zip(axes, [
 fig.suptitle("Step 2 - Non-covalent glycan–protein contacts by interaction type",
              fontsize=11, y=1.02)
 plt.tight_layout()
-plt.savefig("step2_interaction_types.png", dpi=150, bbox_inches="tight")
+plt.savefig(generated_dir / "step2_interaction_types.png", dpi=150, bbox_inches="tight")
 plt.show()
 print("Saved → step2_interaction_types.png")
 
@@ -118,7 +126,7 @@ ax.set_title("Contact distance distribution - 3AVE + 2WAH + 1GYA combined", font
 ax.legend(fontsize=8, frameon=False)
 ax.spines[["top", "right"]].set_visible(False)
 plt.tight_layout()
-plt.savefig("step2_distance_dist.png", dpi=150, bbox_inches="tight")
+plt.savefig(generated_dir / "step2_distance_dist.png", dpi=150, bbox_inches="tight")
 plt.show()
 print("Saved → step2_distance_dist.png")
 
@@ -127,9 +135,9 @@ print("Saved → step2_distance_dist.png")
 import seaborn as sns
 
 for df, label, fname in [
-    (df_3ave, "3AVE – IgG1 Fc",         "step2_heatmap_3AVE.png"),
-    (df_2wah, "2WAH – CD2 adhesion dom","step2_heatmap_2WAH.png"),
-    (df_1gya, "1GYA – CD2 adhesion dom","step2_heatmap_1GYA.png"),
+    (df_3ave, "3AVE – IgG1 Fc",         generated_dir / "step2_heatmap_3AVE.png"),
+    (df_2wah, "2WAH – CD2 adhesion dom",generated_dir / "step2_heatmap_2WAH.png"),
+    (df_1gya, "1GYA – CD2 adhesion dom",generated_dir / "step2_heatmap_1GYA.png"),
 ]:
     pivot = (df.groupby(["glycan_resname", "protein_resnum"])
                .size()
@@ -166,7 +174,7 @@ else:
 
 # ── Cell 7: Export per-structure summary CSVs ─────────────────────────────────
 for df, pid in [(df_3ave, "3AVE"), (df_2wah, "2WAH"), (df_1gya, "1GYA")]:
-    df.to_csv(f"{pid}_contacts.csv", index=False)
+    df.to_csv(generated_dir / f"{pid}_contacts.csv", index=False)
     print(f"Saved {pid}_contacts.csv  ({len(df)} rows)")
 
 print("\nStep 2 complete.  Proceed to Step 3: variant overlay.")
