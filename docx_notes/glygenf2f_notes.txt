@@ -1,0 +1,3 @@
+Mike can put me in contact with people at CCRC that are working on high-mannose sites - these sites are the most likely ones to also have mutations associated with them since one of the obstacles is finding sites that have both a non-covalent interaction with a nearby glycan AND have a mutation that occurs in disease
+
+Talk to Urnisha about compositions = GlyGen doesn’t have info on full glycans for many proteins, it has let’s say the building blocks but not how they are connected - therefore they have to fall back to putting them together in different combinations. This is an uncertainty.
