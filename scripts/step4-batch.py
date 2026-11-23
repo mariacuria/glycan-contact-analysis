@@ -7,6 +7,28 @@ from step3_fetch_variants import (                  # see rename note below
     load_glygen_germline, load_glygen_somatic
 )
 
+# Download GlyGen PDB glycosylation-site table (if missing)
+GLYGEN_VERSION = "2.12.1"
+GLYGEN_SITES_URL = (
+    f"https://data.glygen.org/ln2data/releases/data/v-{GLYGEN_VERSION}/reviewed/"
+    "human_proteoform_glycosylation_sites_rcsb_pdb.csv"
+)
+glygen_sites_csv = Path("../data/downloads/human_proteoform_glycosylation_sites_rcsb_pdb.csv")
+glygen_sites_csv.parent.mkdir(parents=True, exist_ok=True)
+
+if not glygen_sites_csv.exists():
+    tmp_path = glygen_sites_csv.with_suffix(".csv.part")
+    print(f"Downloading {GLYGEN_SITES_URL}")
+    try:
+        urllib.request.urlretrieve(GLYGEN_SITES_URL, tmp_path)
+        tmp_path.replace(glygen_sites_csv)   # only keep the file once it's complete
+        print(f"Saved → {glygen_sites_csv}")
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError(f"Failed to download GlyGen sites CSV: {e}") from e
+else:
+    print(f"Found existing {glygen_sites_csv}")
+
 # ── Step A: build job list from Kate's CSV ────────────────────────────────────
 kate = pd.read_csv("../data/downloads/human_proteoform_glycosylation_sites_rcsb_pdb.csv")
 kate = kate[kate["saccharide"].notna() & (kate["saccharide"].str.strip() != "")]
