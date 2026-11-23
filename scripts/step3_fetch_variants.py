@@ -227,8 +227,8 @@ def fetch_glygen_germline_variants(uniprot_id: str,
     for _, row in subset.iterrows():
         variants.append({
             "pos": int(row["aa_pos"]),
-            "wt": row["ref_aa"],
-            "mut": row["alt_aa"],
+            "wt": str(row["ref_aa"]) if pd.notna(row["ref_aa"]) else "",
+            "mut": str(row["alt_aa"]) if pd.notna(row["alt_aa"]) else "",
             "disease": str(row.get("disease_description", "")),
             "source": "GlyGen-Germline",
         })
@@ -281,6 +281,8 @@ def check_sequon(wt_aa: str, mut_aa: str,
     an N-X-S/T sequon, where X ≠ Pro.
     Returns 'gain', 'loss', or 'none'.
     """
+    if not isinstance(wt_aa, str) or not isinstance(mut_aa, str):
+        return "unknown"
     if sequence is None:
         return "unknown"
     seq_len = len(sequence)
