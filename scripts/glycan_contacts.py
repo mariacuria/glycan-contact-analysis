@@ -1,19 +1,18 @@
 # Usage:
 #   pyenv global 3.14.4
-#   python glycan_contacts.py --pdb ../data/downloads/3AVE.pdb --cutoff 8.0 --out ../data/generated/3AVE_contacts.csv
-#   python glycan_contacts.py --pdb ../data/downloads/1GYA.pdb --cutoff 8.0 --out ../data/generated/1GYA_contacts.csv
-#   python glycan_contacts.py --pdb ../data/downloads/2WAH.pdb --cutoff 8.0 --out ../data/generated/2WAH_contacts.csv
+#   python glycan-contacts.py --pdb ../data/downloads/3AVE.pdb --cutoff 8.0 --out ../data/generated/3AVE_contacts.csv
+#   python glycan-contacts.py --pdb ../data/downloads/1GYA.pdb --cutoff 8.0 --out ../data/generated/1GYA_contacts_with_glycosite.csv
+#   python glycan-contacts.py --pdb ../data/downloads/2WAH.pdb --cutoff 8.0 --out ../data/generated/2WAH_contacts.csv
 
 import argparse
 import warnings
 from pathlib import Path
-from itertools import product
 
 import numpy as np
 import pandas as pd
 from Bio import BiopythonWarning
 from Bio.PDB import PDBParser, NeighborSearch, is_aa
-from Bio.PDB.DSSP import DSSP  # optional – only for secondary structure annotation
+from Bio.PDB.DSSP import DSSP  # for secondary structure annotation
 
 warnings.simplefilter("ignore", BiopythonWarning)
 
@@ -152,6 +151,32 @@ def classify_interaction(
 
     return None  # outside all cutoffs
 
+def parse_link_records(pdb_path: str) -> dict:
+    """
+    Parse LINK records from a PDB file, returning a mapping from
+    (chain, resname, resnum) of each glycan residue to the residue
+    it's directly bonded to (protein or another sugar).
+    """
+    links = {}
+    with open(pdb_path) as fh:
+        for line in fh:
+            if not line.startswith("LINK"):
+                continue
+            parts = line.split()
+            if len(parts) < 9:
+                continue
+            name1, resname1, chain1, resnum1 = parts[1], parts[2], parts[3], parts[4]
+            name2, resname2, chain2, resnum2 = parts[5], parts[6], parts[7], parts[8]
+            try:
+                resnum1, resnum2 = int(resnum1), int(resnum2)
+            except ValueError:
+                continue
+
+            atom1 = (chain1, resname1, resnum1, name1)
+            atom2 = (chain2, resname2, resnum2, name2)
+            links.setdefault((chain1, resname1, resnum1), []).append(atom2)
+            links.setdefault((chain2, resname2, resnum2), []).append(atom1)
+    return links
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core parser
@@ -190,7 +215,8 @@ def parse_contacts(pdb_path: str, outer_cutoff: float = 8.0) -> pd.DataFrame:
             ring_centroids[fid] = c
 
     rows = []
-    seen_pairs = set()  # avoid duplicate residue-level rows from multiple atoms
+    link_map = parse_link_records(pdb_path)
+    print(f"[{pdb_id}] Parsed {len(link_map)} LINK entries")
 
     for g_res in glycan_residues:
         g_chain   = g_res.get_parent().get_id()
@@ -212,7 +238,7 @@ def parse_contacts(pdb_path: str, outer_cutoff: float = 8.0) -> pd.DataFrame:
                 p_fid = p_res.get_full_id()
                 dist  = float(g_atom - p_atom)
 
-                # Skip if this is a covalent glycan–Asn bond (N-glycosylation)
+                # Record covalent glycan–Asn bonds (N-glycosylation) to capture information about which amino acid the glycan is attached to
                 # The Asn ND2 – NAG C1 bond is ~1.45 Å; exclude < 1.8 Å
                 if dist < 1.8:
                     continue
@@ -221,11 +247,6 @@ def parse_contacts(pdb_path: str, outer_cutoff: float = 8.0) -> pd.DataFrame:
                 itype = classify_interaction(g_atom, p_atom, p_res, dist, centroid)
                 if itype is None:
                     continue
-
-                # Build a unique per-residue key for deduplication at residue level
-                pair_key = (g_resname, g_resnum, g_chain,
-                            p_res.get_resname().strip(), p_res.get_id()[1],
-                            p_res.get_parent().get_id(), itype)
 
                 # Record atom-level detail (keep closest atom pair per residue pair)
                 rows.append({
@@ -258,6 +279,25 @@ def parse_contacts(pdb_path: str, outer_cutoff: float = 8.0) -> pd.DataFrame:
             .reset_index(drop=True))
 
     print(f"[{pdb_id}] {len(df)} unique glycan–residue contact pairs identified.")
+
+    def find_protein_anchor(key, visited=None):
+        visited = visited or set()
+        if key in visited:
+            return None
+        visited.add(key)
+        for chain, resname, resnum, _ in link_map.get(key, []):
+            if resname not in GLYCAN_CODES:
+                return f"{resname}{resnum}:{chain}"
+            result = find_protein_anchor((chain, resname, resnum), visited)
+            if result:
+                return result
+        return None
+
+    df["attached_to"] = df.apply(
+        lambda r: find_protein_anchor((r["glycan_chain"], r["glycan_resname"], r["glycan_resnum"])) or "?",
+        axis=1
+    )
+
     return df
 
 
@@ -298,12 +338,10 @@ def add_secondary_structure(df: pd.DataFrame, pdb_path: str,
     Falls back gracefully if DSSP is unavailable.
     """
     try:
-        from Bio.PDB import PDBParser
-        from Bio.PDB.DSSP import DSSP as _DSSP
         parser = PDBParser(QUIET=True)
         struct  = parser.get_structure("X", pdb_path)
         model   = struct[0]
-        dssp    = _DSSP(model, pdb_path, dssp=dssp_exe)
+        dssp    = DSSP(model, pdb_path, dssp=dssp_exe)
 
         def get_ss(row):
             key = (row["protein_chain"], (" ", row["protein_resnum"], " "))
